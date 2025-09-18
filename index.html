@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Power Pack Static Starter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <h1>Power Pack Static Starter</h1>
+    <p>Claude Code + Cursor + WSL + GitHub CLI + Vercel CLI ✅</p>
+    <button id="b">Change Background</button>
+  </main>
+  <script>
+    const colors = ["#fca5a5","#fdba74","#fde68a","#86efac","#93c5fd","#c4b5fd","#f0abfc"];
+    document.getElementById('b').onclick = () => {
+      const a = colors[Math.random()*colors.length|0];
+      const b = colors[Math.random()*colors.length|0];
+      document.body.style.background = `linear-gradient(135deg, ${a}, ${b})`;
+    };
+  </script>
+</body>
+</html>

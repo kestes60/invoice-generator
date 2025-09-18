@@ -1,0 +1,10 @@
+{
+  "name": "ppack-template-static",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "login": "gh auth login && vercel login"
+  }
+}

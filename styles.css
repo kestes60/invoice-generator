@@ -1,0 +1,7 @@
+html,body{height:100%;margin:0}
+body{font-family:system-ui,Segoe UI,Arial;display:grid;place-items:center;min-height:100vh;
+     background:linear-gradient(135deg,#6ee7b7,#93c5fd)}
+main{display:grid;gap:12px;place-items:center;text-align:center;padding:2rem;background:white;
+     border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+button{padding:0.75rem 1rem;border:0;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.15);
+       font-size:1rem;cursor:pointer}
