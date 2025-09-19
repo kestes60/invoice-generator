@@ -1,4 +1,4 @@
-<!-- Version: 2025-09-19-STRIPE-FIX-v3 -->
+<!-- Version: 2025-09-19-STRIPE-CAMELCASE-v4 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2208,24 +2208,24 @@
                         currency: STRIPE_CONFIG.currency
                     });
 
-                    // Use Stripe Checkout (correct parameter names)
+                    // Use Stripe Checkout (client-side camelCase parameters)
                     const result = await stripe.redirectToCheckout({
                         mode: 'payment',
-                        line_items: [{
-                            price_data: {
+                        lineItems: [{
+                            priceData: {
                                 currency: STRIPE_CONFIG.currency,
-                                product_data: {
+                                productData: {
                                     name: STRIPE_CONFIG.productName,
                                     description: invoiceTotal > 5
                                         ? `Premium unlock for invoice total $${invoiceTotal.toFixed(2)}`
                                         : 'Remove watermark and unlock premium features'
                                 },
-                                unit_amount: premiumUnlockAmount
+                                unitAmount: premiumUnlockAmount
                             },
                             quantity: 1
                         }],
-                        success_url: STRIPE_CONFIG.successUrl,
-                        cancel_url: STRIPE_CONFIG.cancelUrl
+                        successUrl: STRIPE_CONFIG.successUrl,
+                        cancelUrl: STRIPE_CONFIG.cancelUrl
                     });
 
                     // This will only execute if redirectToCheckout fails
