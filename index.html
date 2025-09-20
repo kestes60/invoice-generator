@@ -81,6 +81,188 @@
                 console.log('❌ jsPDF test error:', error.message);
             }
         };
+
+        // === LIBRARY LOADING MANAGEMENT ===
+
+        /**
+         * Library loading state and detection system
+         */
+        window.LibraryLoader = {
+            state: {
+                jsPDF: { loaded: false, failed: false },
+                Stripe: { loaded: false, failed: false },
+                loading: true,
+                ready: false
+            },
+
+            promises: {
+                jsPDF: null,
+                Stripe: null,
+                all: null
+            },
+
+            /**
+             * Initialize library loading detection
+             */
+            init() {
+                console.log('🔄 Initializing library loading detection...');
+
+                // Create promises for each library
+                this.promises.jsPDF = new Promise((resolve, reject) => {
+                    const checkjsPDF = () => {
+                        if (window.jsPDFLoaded && window.jspdf?.jsPDF) {
+                            this.state.jsPDF.loaded = true;
+                            console.log('✅ jsPDF confirmed ready');
+                            resolve(true);
+                        } else if (window.jsPDFLoadError) {
+                            this.state.jsPDF.failed = true;
+                            console.warn('❌ jsPDF failed to load');
+                            reject(new Error('jsPDF failed to load'));
+                        } else {
+                            // Keep checking every 100ms
+                            setTimeout(checkjsPDF, 100);
+                        }
+                    };
+                    checkjsPDF();
+
+                    // Timeout after 10 seconds
+                    setTimeout(() => {
+                        if (!this.state.jsPDF.loaded) {
+                            this.state.jsPDF.failed = true;
+                            console.error('❌ jsPDF loading timeout');
+                            reject(new Error('jsPDF loading timeout'));
+                        }
+                    }, 10000);
+                });
+
+                this.promises.Stripe = new Promise((resolve, reject) => {
+                    const checkStripe = () => {
+                        if (typeof Stripe !== 'undefined') {
+                            this.state.Stripe.loaded = true;
+                            console.log('✅ Stripe.js confirmed ready');
+                            resolve(true);
+                        } else {
+                            // Keep checking every 100ms
+                            setTimeout(checkStripe, 100);
+                        }
+                    };
+                    checkStripe();
+
+                    // Timeout after 10 seconds
+                    setTimeout(() => {
+                        if (!this.state.Stripe.loaded) {
+                            this.state.Stripe.failed = true;
+                            console.error('❌ Stripe.js loading timeout');
+                            reject(new Error('Stripe.js loading timeout'));
+                        }
+                    }, 10000);
+                });
+
+                // Combined promise for all libraries
+                this.promises.all = Promise.allSettled([this.promises.jsPDF, this.promises.Stripe])
+                    .then((results) => {
+                        this.state.loading = false;
+                        this.state.ready = results.every(result => result.status === 'fulfilled');
+
+                        console.log('📚 Library loading complete:', {
+                            jsPDF: this.state.jsPDF.loaded ? '✅' : '❌',
+                            Stripe: this.state.Stripe.loaded ? '✅' : '❌',
+                            allReady: this.state.ready ? '✅' : '❌'
+                        });
+
+                        // Trigger ready event
+                        window.dispatchEvent(new CustomEvent('librariesReady', {
+                            detail: {
+                                success: this.state.ready,
+                                failures: {
+                                    jsPDF: this.state.jsPDF.failed,
+                                    Stripe: this.state.Stripe.failed
+                                }
+                            }
+                        }));
+
+                        return this.state.ready;
+                    });
+
+                return this.promises.all;
+            },
+
+            /**
+             * Check if all required libraries are ready
+             */
+            isReady() {
+                return this.state.ready && !this.state.loading;
+            },
+
+            /**
+             * Wait for libraries to be ready
+             */
+            waitForReady() {
+                if (this.isReady()) {
+                    return Promise.resolve(true);
+                }
+
+                if (!this.promises.all) {
+                    this.init();
+                }
+
+                return this.promises.all;
+            },
+
+            /**
+             * Get current loading status
+             */
+            getStatus() {
+                return {
+                    ...this.state,
+                    jsPDFAvailable: typeof window.jspdf?.jsPDF !== 'undefined',
+                    StripeAvailable: typeof Stripe !== 'undefined'
+                };
+            }
+        };
+
+        // Initialize library loading detection immediately with error handling
+        try {
+            window.LibraryLoader.init();
+        } catch (error) {
+            console.error('❌ Failed to initialize LibraryLoader:', error);
+
+            // Fallback: Create a minimal safety net
+            window.LibraryLoader = {
+                state: { loading: false, ready: false },
+                isReady: () => false,
+                waitForReady: () => Promise.reject(new Error('LibraryLoader failed to initialize')),
+                getStatus: () => ({ error: 'LibraryLoader initialization failed' })
+            };
+
+            // Still try to detect libraries manually after a delay
+            setTimeout(() => {
+                console.log('🔄 Attempting manual library detection fallback...');
+                const jsPDFReady = window.jsPDFLoaded && window.jspdf?.jsPDF;
+                const StripeReady = typeof Stripe !== 'undefined';
+
+                if (jsPDFReady && StripeReady) {
+                    console.log('✅ Manual detection: Both libraries appear ready');
+                    window.dispatchEvent(new CustomEvent('librariesReady', {
+                        detail: { success: true, failures: {} }
+                    }));
+                } else {
+                    console.warn('⚠️ Manual detection: Some libraries missing', {
+                        jsPDF: jsPDFReady ? '✅' : '❌',
+                        Stripe: StripeReady ? '✅' : '❌'
+                    });
+                    window.dispatchEvent(new CustomEvent('librariesReady', {
+                        detail: {
+                            success: false,
+                            failures: {
+                                jsPDF: !jsPDFReady,
+                                Stripe: !StripeReady
+                            }
+                        }
+                    }));
+                }
+            }, 3000);
+        }
     </script>
     <script src="https://js.stripe.com/v3/"></script>
 
@@ -764,11 +946,47 @@
 
             /**
              * Global error handler for unhandled exceptions
+             * Now includes library loading awareness to prevent false positives during initialization
              */
             window.addEventListener('error', function(event) {
+                const errorMessage = event.error?.message || event.message || 'Unknown error';
+
+                // Check if this is a library loading related error during initialization
+                if (window.LibraryLoader && window.LibraryLoader.state.loading) {
+                    // During library loading, only log library-related errors without showing popups
+                    const isLibraryError = errorMessage.includes('Stripe') ||
+                                         errorMessage.includes('jsPDF') ||
+                                         errorMessage.includes('jspdf') ||
+                                         event.filename?.includes('stripe') ||
+                                         event.filename?.includes('jspdf');
+
+                    if (isLibraryError) {
+                        console.warn('📚 Library loading error (expected during initialization):', errorMessage);
+                        trackAnalyticsEvent('error', 'library_loading_error', errorMessage);
+                        return; // Don't show popup during library loading
+                    }
+                }
+
+                // Check if libraries are still loading and this might be a premature validation error
+                if (window.LibraryLoader && window.LibraryLoader.state.loading) {
+                    const isValidationError = errorMessage.includes('validation') ||
+                                            errorMessage.includes('undefined') ||
+                                            errorMessage.includes('not loaded');
+
+                    if (isValidationError) {
+                        console.warn('⏳ Validation error during library loading (ignoring):', errorMessage);
+                        return; // Don't show popup for validation errors during loading
+                    }
+                }
+
+                // For all other errors, proceed with normal error handling
                 console.error('Global error caught:', event.error);
-                trackAnalyticsEvent('error', 'global_error', event.error?.message || 'Unknown error');
-                showMessage('An unexpected error occurred. Please refresh the page if the problem persists.', 'error');
+                trackAnalyticsEvent('error', 'global_error', errorMessage);
+
+                // Only show popup if not in loading state or if it's a genuine error
+                if (!window.LibraryLoader || !window.LibraryLoader.state.loading) {
+                    showMessage('An unexpected error occurred. Please refresh the page if the problem persists.', 'error');
+                }
             });
 
             /**
@@ -2320,7 +2538,7 @@
                 productName: 'QuickInvoice Premium',
                 // Fixed $5 pricing: Simple premium unlock for watermark removal (25 invoices)
                 // Create this price in your Stripe dashboard: Products → Add Product → "$5 Premium Unlock" → One-time payment
-                priceId: 'prod_T5cU0YEGn0H8Ce', // Replace with actual price_xxx ID from Stripe dashboard
+                priceId: 'price_1S9RFRQ0VFX8PYxQaZndix94', // Actual price ID from Stripe dashboard
                 successUrl: window.location.origin + window.location.pathname + '?payment=success',
                 cancelUrl: window.location.origin + window.location.pathname + '?payment=cancel'
             };
@@ -3366,6 +3584,23 @@
         function checkDeploymentReadiness() {
             console.log('🚀 Checking Deployment Readiness...');
 
+            // Check if libraries are ready before proceeding
+            if (window.LibraryLoader && !window.LibraryLoader.isReady()) {
+                console.warn('⏳ Libraries still loading, cannot perform deployment readiness check yet');
+                if (window.LibraryLoader.state.loading) {
+                    console.log('📚 Waiting for libraries to finish loading...');
+                    window.LibraryLoader.waitForReady().then(() => {
+                        console.log('✅ Libraries ready, retrying deployment readiness check');
+                        checkDeploymentReadiness();
+                    }).catch((error) => {
+                        console.error('❌ Library loading failed:', error);
+                        console.log('⚠️ Proceeding with deployment check despite library issues');
+                        // Continue with check anyway, but note the library issues
+                    });
+                }
+                return false;
+            }
+
             const checks = [
                 {
                     name: 'Stripe Configuration',
@@ -3501,6 +3736,22 @@
         function quickValidationTest() {
             console.log('⚡ Running Quick Validation Test...');
 
+            // Check if libraries are ready before proceeding
+            if (window.LibraryLoader && !window.LibraryLoader.isReady()) {
+                console.warn('⏳ Libraries still loading, deferring quick validation test');
+                if (window.LibraryLoader.state.loading) {
+                    console.log('📚 Will retry after libraries load...');
+                    window.LibraryLoader.waitForReady().then(() => {
+                        console.log('✅ Libraries ready, retrying quick validation test');
+                        quickValidationTest();
+                    }).catch((error) => {
+                        console.error('❌ Library loading failed:', error);
+                        console.log('⚠️ Proceeding with validation despite library issues');
+                    });
+                }
+                return false;
+            }
+
             const issues = [];
 
             // Test 1: Core functions exist
@@ -3557,14 +3808,25 @@
         window.runAllValidationTests = runAllValidationTests;
         window.quickValidationTest = quickValidationTest;
 
-        // Auto-run deployment readiness check after page load
+        // Library-aware validation auto-run system
         if (typeof window !== 'undefined') {
-            window.addEventListener('load', () => {
-                setTimeout(() => {
-                    console.log('\n🔧 Auto-running deployment readiness check...');
-                    checkDeploymentReadiness();
+            // Listen for libraries ready event
+            window.addEventListener('librariesReady', (event) => {
+                if (event.detail.success) {
+                    console.log('\n🔧 Libraries loaded successfully, running deployment readiness check...');
+                    setTimeout(() => {
+                        checkDeploymentReadiness();
+                    }, 500); // Short delay to ensure everything is settled
+                } else {
+                    console.warn('\n⚠️ Some libraries failed to load:', event.detail.failures);
+                    console.log('⚡ Running validation anyway to show what works...');
+                    setTimeout(() => {
+                        checkDeploymentReadiness();
+                    }, 500);
+                }
 
-                    // Display validation guide
+                // Display validation guide after libraries are ready
+                setTimeout(() => {
                     console.log('\n📋 VALIDATION COMMANDS AVAILABLE:');
                     console.log('==========================================');
                     console.log('• quickValidationTest()     - Quick 30-second test');
@@ -3575,7 +3837,19 @@
                     console.log('');
                     console.log('📖 See VALIDATION_GUIDE.md for detailed instructions');
                     console.log('💡 Run runAllValidationTests() for complete validation');
-                }, 2000);
+                }, 1000);
+            });
+
+            // Fallback: if libraries don't load within reasonable time, still show the guide
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    // Only run fallback if libraries haven't reported ready yet
+                    if (window.LibraryLoader && window.LibraryLoader.state.loading) {
+                        console.log('\n⏳ Libraries still loading after 5 seconds...');
+                        console.log('📋 Validation commands will be available once libraries load');
+                        console.log('💡 You can manually run checkDeploymentReadiness() if needed');
+                    }
+                }, 5000);
             });
         }
 
