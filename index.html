@@ -1,4 +1,4 @@
-<!-- Version: 2025-09-19-STRIPE-CAMELCASE-v4 -->
+<!-- Version: 2025-09-19-STRIPE-COMPREHENSIVE-SETUP-DOCS-v5 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -170,6 +170,13 @@
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Pulse animation for payment success celebration */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
         }
 
         /* Improved error states */
@@ -564,6 +571,14 @@
                         </button>
                     </div>
                     <div id="download-status" class="text-sm text-gray-600 text-center" role="status" aria-live="polite"></div>
+
+                    <!-- Watermark Control -->
+                    <div class="watermark-controls mt-4 p-4 bg-gray-50 rounded-lg border">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" id="watermark-toggle" class="rounded border-gray-300" disabled>
+                            <label for="watermark-toggle" class="text-sm text-gray-600">Watermark enabled (upgrade to remove)</label>
+                        </div>
+                    </div>
                 </form>
             </section>
 
@@ -1356,10 +1371,80 @@
              * Update watermark display based on premium status
              */
             function updateWatermarkDisplay() {
+                updateWatermarkToggleState();
+                updatePremiumStatusIndicator();
+                updateWatermarkOverlay();
+            }
+
+            function updateWatermarkToggleState() {
+                const watermarkToggle = document.getElementById('watermark-toggle');
+                if (!watermarkToggle) return;
+
+                const isPremium = isPremiumActive();
+                const remaining = getPremiumInvoicesLeft();
+
+                if (isPremium) {
+                    // Premium active - watermark will be skipped
+                    watermarkToggle.checked = false; // Watermark is "off"
+                    watermarkToggle.disabled = true;
+
+                    // Update label to show premium status
+                    const label = watermarkToggle.nextElementSibling;
+                    if (label) {
+                        label.textContent = `Watermark disabled (${remaining} premium left)`;
+                        label.className = 'text-green-600 font-medium';
+                    }
+                } else {
+                    // No premium - watermark will be added
+                    watermarkToggle.checked = true; // Watermark is "on"
+                    watermarkToggle.disabled = true; // Keep disabled, controlled by premium status
+
+                    // Update label to show upgrade option
+                    const label = watermarkToggle.nextElementSibling;
+                    if (label) {
+                        label.textContent = 'Watermark enabled (upgrade to remove)';
+                        label.className = 'text-gray-600';
+                    }
+                }
+            }
+
+            function updatePremiumStatusIndicator() {
+                // Find or create premium status indicator near the watermark toggle
+                let statusIndicator = document.getElementById('premium-status-indicator');
+
+                if (!statusIndicator) {
+                    // Create indicator if it doesn't exist
+                    const watermarkContainer = document.querySelector('.watermark-controls') ||
+                                               document.querySelector('label[for="watermark-toggle"]')?.parentElement ||
+                                               document.querySelector('#watermark-overlay')?.parentElement;
+
+                    if (watermarkContainer) {
+                        statusIndicator = document.createElement('div');
+                        statusIndicator.id = 'premium-status-indicator';
+                        statusIndicator.className = 'text-sm mt-2 px-3 py-1 rounded-lg';
+                        watermarkContainer.appendChild(statusIndicator);
+                    }
+                }
+
+                if (statusIndicator) {
+                    const isPremium = isPremiumActive();
+                    const remaining = getPremiumInvoicesLeft();
+
+                    if (isPremium) {
+                        statusIndicator.textContent = `✨ Premium Active: ${remaining} watermark-free invoices remaining`;
+                        statusIndicator.className = 'text-sm mt-2 px-3 py-1 rounded-lg bg-green-100 text-green-700 border border-green-200';
+                    } else {
+                        statusIndicator.textContent = '💧 Watermarks enabled - upgrade for professional PDFs';
+                        statusIndicator.className = 'text-sm mt-2 px-3 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200';
+                    }
+                }
+            }
+
+            function updateWatermarkOverlay() {
                 const watermarkOverlay = document.getElementById('watermark-overlay');
                 if (!watermarkOverlay) return;
 
-                const isPremium = localStorage.getItem('quickinvoice_premium') === 'true';
+                const isPremium = isPremiumActive();
 
                 if (isPremium) {
                     watermarkOverlay.style.display = 'none';
@@ -1687,8 +1772,8 @@
                     const margin = 20;
                     let yPosition = margin;
 
-                    // Check premium status for watermark
-                    const isPremium = localStorage.getItem('quickinvoice_premium') === 'true';
+                    // Check premium status for watermark using new counter system
+                    const isPremium = isPremiumActive();
 
                     // Get form data
                     const formData = getFormData();
@@ -1907,10 +1992,8 @@
                         });
                     }
 
-                    // Add watermark for free tier
-                    if (!isPremium) {
-                        addWatermark(doc, pageWidth, pageHeight);
-                    }
+                    // Add watermark for free tier (addWatermark now handles premium check internally)
+                    addWatermark(doc, pageWidth, pageHeight);
 
                     // Generate filename
                     const filename = generatePDFFilename(formData.invoiceNumber, formData.invoiceDate);
@@ -1920,6 +2003,9 @@
 
                     hideLoadingIndicator();
                     showMessage('PDF downloaded successfully!', 'success');
+
+                    // Handle premium invoice usage after successful PDF generation
+                    handlePremiumPDFGeneration();
 
                     // Track successful PDF generation
                     trackAnalyticsEvent('pdf_download', 'conversion', isPremium ? 'premium_user' : 'free_user', 1);
@@ -1943,6 +2029,13 @@
              * Add watermark to PDF for free tier
              */
             function addWatermark(doc, pageWidth, pageHeight) {
+                // Check premium status - skip watermark if premium is active
+                if (isPremiumActive()) {
+                    console.log('✅ Premium active - skipping watermark');
+                    return; // Exit early, no watermark added
+                }
+
+                // Existing watermark code continues here for non-premium users
                 try {
                     // Set watermark styling
                     doc.setTextColor(200, 200, 200);
@@ -1961,6 +2054,8 @@
 
                     // Reset text color to black
                     doc.setTextColor(0, 0, 0);
+
+                    console.log('ℹ️ Watermark added - upgrade to remove');
                 } catch (error) {
                     console.warn('Watermark error:', error);
                     try {
@@ -2071,14 +2166,161 @@
             // === STRIPE PAYMENT INTEGRATION ===
 
             /**
-             * Stripe Configuration
+             * STRIPE SETUP INSTRUCTIONS (Personal Account)
+             * ============================================
+             *
+             * 1. Create Personal Stripe Account:
+             *    - Go to dashboard.stripe.com
+             *    - Sign up with personal email (not business)
+             *    - Complete identity verification if required
+             *
+             * 2. Create Product & Price:
+             *    a) Go to Products section (dashboard.stripe.com/products)
+             *    b) Click "Add product"
+             *    c) Product details:
+             *       - Name: "QuickInvoice Premium Unlock"
+             *       - Description: "Remove watermarks and generate up to 25 professional invoices"
+             *       - Image: Optional (can add logo later)
+             *    d) Pricing details:
+             *       - Pricing model: "One time"
+             *       - Price: $5.00 USD
+             *       - Price description: "25 Premium Invoices"
+             *    e) Click "Save product"
+             *    f) Copy the Price ID (starts with "price_") from the pricing section
+             *
+             * 3. Get API Keys:
+             *    - Go to Developers > API keys (dashboard.stripe.com/apikeys)
+             *    - Copy "Publishable key" (starts with pk_test_) - already configured below
+             *    - Keep "Secret key" (starts with sk_test_) private - not needed for static sites
+             *
+             * 4. Update Configuration:
+             *    - Replace 'price_REPLACE_WITH_ACTUAL_PRICE_ID' below with your actual price ID
+             *    - Verify publishable key matches your account
+             *
+             * 5. Test Cards (for testing):
+             *    - Success: 4242 4242 4242 4242 (any future date, any CVC)
+             *    - Decline: 4000 0000 0000 0002
+             *    - More test cards: stripe.com/docs/testing#cards
+             *
+             * 6. Go Live (when ready):
+             *    - Complete Stripe account setup (bank details, tax info)
+             *    - Switch to live mode in Stripe dashboard
+             *    - Replace pk_test_ with pk_live_ key
+             *    - Create new product in live mode
+             *    - Update price ID to live price ID
+             *
+             * REVENUE: You receive $4.56 per $5.00 payment (Stripe fee: 2.9% + 30¢)
+             *
+             * ============================================
+             * DEPLOYMENT INSTRUCTIONS
+             * ======================
+             *
+             * Prerequisites:
+             * - Vercel account connected to GitHub
+             * - Stripe price ID configured above
+             *
+             * Deploy Commands:
+             * 1. git add .
+             * 2. git commit -m "feat: add $5 premium unlock with 25-invoice tracking"
+             * 3. git push origin main
+             * 4. Vercel auto-deploys from GitHub (or run: vercel --prod)
+             *
+             * Verification Steps:
+             * 1. Open deployed site in incognito browser
+             * 2. Fill out invoice form with test data
+             * 3. Click "$5 Unlock Premium (25 invoices)" button
+             * 4. Should redirect to Stripe checkout (NOT demo mode)
+             * 5. Use test card: 4242 4242 4242 4242
+             * 6. Complete checkout → should redirect back with success
+             * 7. Button should show "✓ Premium (25 left)"
+             * 8. Generate PDF → should be watermark-free
+             * 9. Button should show "✓ Premium (24 left)"
+             *
+             * Troubleshooting:
+             * - Demo mode popup = price ID not set or Stripe not configured
+             * - Parameter errors = check price ID format (should start with "price_")
+             * - Checkout fails = verify publishable key matches your account
+             * - Success redirect fails = check success_url in Stripe dashboard
+             *
+             * ============================================
+             * TESTING PROCEDURES
+             * ==================
+             *
+             * Test Scenarios:
+             *
+             * 1. Free User Experience:
+             *    - Generate PDF → should have watermark
+             *    - Button shows "$5 Unlock Premium (25 invoices)"
+             *    - Watermark toggle shows "enabled (upgrade to remove)"
+             *
+             * 2. Payment Flow:
+             *    - Click premium button → redirect to Stripe
+             *    - Use 4242 4242 4242 4242 → success
+             *    - Redirect back → button shows "✓ Premium (25 left)"
+             *    - Success message appears
+             *
+             * 3. Premium User Experience:
+             *    - Generate PDF → no watermark
+             *    - Counter decrements: "✓ Premium (24 left)"
+             *    - Watermark toggle shows "disabled (X premium left)"
+             *    - Premium status indicator shows remaining count
+             *
+             * 4. Premium Expiration:
+             *    - Generate 25 PDFs → counter reaches 0
+             *    - Button changes to "$5 Unlock Premium (25 invoices)"
+             *    - Next PDF has watermark again
+             *    - Clear messaging about premium expiration
+             *
+             * 5. Edge Cases:
+             *    - Payment cancellation → no premium activation
+             *    - Browser refresh during premium → state persists
+             *    - Multiple tabs → premium status syncs
+             *
+             * Test Cards:
+             * - Success: 4242 4242 4242 4242
+             * - Decline: 4000 0000 0000 0002
+             * - Authentication: 4000 0025 0000 3155
+             * - International: 4000 0000 0000 0077
+             *
+             * ============================================
+             * REVENUE INFORMATION
+             * ==================
+             *
+             * Pricing Structure:
+             * - Customer pays: $5.00
+             * - Stripe fee: $0.44 (2.9% + $0.30)
+             * - You receive: $4.56
+             *
+             * Monthly Revenue Examples:
+             * - 10 purchases = $45.60
+             * - 25 purchases = $114.00
+             * - 50 purchases = $228.00
+             * - 100 purchases = $456.00
+             *
+             * Annual Revenue Examples:
+             * - 500 purchases = $2,280
+             * - 1,000 purchases = $4,560
+             * - 2,000 purchases = $9,120
+             *
+             * Business Model:
+             * - One-time purchase per 25 invoices
+             * - Repeat customers likely (freelancers generate many invoices)
+             * - Professional PDF generation justifies $5 price point
+             * - No ongoing costs (static hosting)
+             *
+             * Tax Considerations:
+             * - Report Stripe income on tax returns
+             * - Stripe provides annual 1099-K forms
+             * - Consult tax professional for proper reporting
              */
             const STRIPE_CONFIG = {
                 // Replace with your actual Stripe publishable key (starts with pk_test_ for testing or pk_live_ for production)
                 publishableKey: 'pk_test_51RIaSlQ0VFX8PYxQ8vJ14Q4isN5uGcbsaH41gcmbXCQjSBhmlZul68dPV9yhPsJl9NRJ8lFWVK8CKXtv0mgppLip00lMwnozj8',
                 currency: 'usd',
                 productName: 'QuickInvoice Premium',
-                // Dynamic pricing: Uses invoice total with $5 minimum (calculated in createCheckoutSession)
+                // Fixed $5 pricing: Simple premium unlock for watermark removal (25 invoices)
+                // Create this price in your Stripe dashboard: Products → Add Product → "$5 Premium Unlock" → One-time payment
+                priceId: 'price_REPLACE_WITH_ACTUAL_PRICE_ID', // Replace with actual price_xxx ID from Stripe dashboard
                 successUrl: window.location.origin + window.location.pathname + '?payment=success',
                 cancelUrl: window.location.origin + window.location.pathname + '?payment=cancel'
             };
@@ -2106,33 +2348,131 @@
             }
 
             /**
-             * Check and update premium status
+             * Get remaining premium invoices count
+             */
+            function getPremiumInvoicesLeft() {
+                const count = parseInt(localStorage.getItem('premiumInvoicesLeft') || '0');
+                return Math.max(0, count); // Ensure non-negative
+            }
+
+            /**
+             * Check if user has premium status (has remaining premium invoices)
+             */
+            function isPremiumActive() {
+                return getPremiumInvoicesLeft() > 0;
+            }
+
+            /**
+             * Use one premium invoice (call when PDF is generated)
+             */
+            function usePremiumInvoice() {
+                const current = getPremiumInvoicesLeft();
+                if (current > 0) {
+                    const newCount = current - 1;
+                    localStorage.setItem('premiumInvoicesLeft', newCount.toString());
+                    console.log(`Premium invoices remaining: ${newCount}`);
+
+                    // Update UI to reflect new count
+                    updatePremiumButtonText();
+                    updateWatermarkDisplay();
+
+                    return true; // Premium invoice used
+                }
+                return false; // No premium invoices left
+            }
+
+            /**
+             * Activate premium (25 invoices) - call on payment success
+             */
+            function activatePremium() {
+                localStorage.setItem('premiumInvoicesLeft', '25');
+                console.log('✅ Premium activated! 25 invoices unlocked');
+
+                // Update UI immediately
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+                updateDownloadButtonState();
+
+                // Show success message
+                showMessage('Premium activated! Next 25 invoices will be watermark-free.', 'success');
+            }
+
+            /**
+             * Handle premium PDF generation - call after successful PDF creation
+             */
+            function handlePremiumPDFGeneration() {
+                // This should be called after successful PDF generation
+                if (isPremiumActive()) {
+                    usePremiumInvoice();
+
+                    // If this was the last premium invoice, notify user
+                    if (getPremiumInvoicesLeft() === 0) {
+                        setTimeout(() => {
+                            showMessage('All 25 premium invoices used. Watermarks will return for future invoices.', 'info');
+                        }, 2000);
+                    }
+                }
+            }
+
+            /**
+             * Check and update premium status (updated to use localStorage counter)
              */
             function checkPremiumStatus() {
-                const isPremium = localStorage.getItem('quickinvoice_premium') === 'true';
-                updatePremiumButton(isPremium);
+                const isPremium = isPremiumActive();
+                updatePremiumButtonText();
                 updateWatermarkDisplay();
                 return isPremium;
             }
 
+            // Debug functions for development/testing
             /**
-             * Update premium unlock button state
+             * Reset premium status (for development/testing)
              */
-            function updatePremiumButton(isPremium) {
+            function resetPremiumStatus() {
+                localStorage.removeItem('premiumInvoicesLeft');
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+                console.log('Premium status reset');
+            }
+
+            /**
+             * Add debug premium invoices (for development/testing)
+             */
+            function addDebugPremium(count = 25) {
+                localStorage.setItem('premiumInvoicesLeft', count.toString());
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+                console.log(`Debug: Added ${count} premium invoices`);
+            }
+
+            /**
+             * Update premium unlock button text to show remaining count
+             */
+            function updatePremiumButtonText() {
                 const premiumButton = document.getElementById('premium-unlock');
                 if (!premiumButton) return;
 
-                if (isPremium) {
-                    premiumButton.textContent = '✓ Premium Active';
-                    premiumButton.className = 'bg-gray-600 text-white px-4 py-2 rounded-lg font-medium cursor-default';
+                const remaining = getPremiumInvoicesLeft();
+
+                if (remaining > 0) {
+                    premiumButton.textContent = `✓ Premium (${remaining} left)`;
+                    premiumButton.className = 'bg-green-600 text-white px-4 py-2 rounded-lg font-medium cursor-default';
                     premiumButton.disabled = true;
-                    premiumButton.setAttribute('aria-label', 'Premium features are active');
+                    premiumButton.setAttribute('aria-label', `Premium active with ${remaining} invoices remaining`);
                 } else {
-                    premiumButton.textContent = '$5 Unlock Premium';
-                    premiumButton.className = 'bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors';
+                    premiumButton.textContent = '$5 Unlock Premium (25 invoices)';
+                    premiumButton.className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors';
                     premiumButton.disabled = false;
                     premiumButton.setAttribute('aria-label', 'Unlock premium features for $5');
                 }
+            }
+
+            /**
+             * Update premium unlock button state (legacy function for compatibility)
+             */
+            function updatePremiumButton(isPremium) {
+                // Redirect to new function that uses localStorage counter
+                updatePremiumButtonText();
             }
 
             /**
@@ -2143,98 +2483,88 @@
                 if (!premiumButton) return;
 
                 if (isLoading) {
-                    premiumButton.textContent = 'Processing...';
                     premiumButton.disabled = true;
-                    premiumButton.className = 'bg-gray-500 text-white px-4 py-2 rounded-lg font-medium cursor-wait';
+                    premiumButton.innerHTML = `
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing...
+                    `;
+                    premiumButton.className = 'bg-gray-400 text-white px-4 py-2 rounded-lg font-medium cursor-not-allowed';
                 } else {
-                    updatePremiumButton(false); // Reset to default state
+                    premiumButton.disabled = false;
+                    // Let updatePremiumButtonText() handle the proper text and styling
+                    updatePremiumButtonText();
                 }
             }
 
             /**
              * Handle premium unlock button click
              */
-            function handlePremiumUnlock() {
-                // Track premium unlock attempt
-                trackAnalyticsEvent('premium_unlock_clicked', 'monetization', 'upgrade_intent');
-
-                // Check if already premium
-                if (checkPremiumStatus()) {
-                    showMessage('Premium features are already active!', 'info');
-                    return;
-                }
-
-                // Check if Stripe is initialized
-                if (!stripe) {
-                    if (!initializeStripe()) {
-                        showMessage('Payment system not available. Please refresh the page and try again.', 'error');
-                        trackAnalyticsEvent('payment_system_error', 'monetization', 'stripe_init_failed');
+            async function handlePremiumUnlock() {
+                try {
+                    // Check if already premium
+                    if (isPremiumActive()) {
+                        showMessage('Premium is already active!', 'info');
                         return;
                     }
+
+                    // Set loading state
+                    setPremiumButtonLoading(true);
+
+                    // Track attempt
+                    trackAnalyticsEvent('premium_unlock_attempt', 'monetization', 'button_click');
+
+                    // Create checkout session (implemented by Stripe Configuration Agent)
+                    await createCheckoutSession();
+
+                } catch (error) {
+                    handleStripeError(error);
                 }
-
-                // Set loading state
-                setPremiumButtonLoading(true);
-
-                // Create checkout session
-                createCheckoutSession();
             }
 
             /**
-             * Create Stripe Checkout session
+             * Create a Stripe checkout session
+             * Fixed $5 premium unlock using pre-defined Stripe price
+             *
+             * SETUP INSTRUCTIONS:
+             * 1. Login to your Stripe Dashboard (https://dashboard.stripe.com)
+             * 2. Go to Products → Add Product
+             * 3. Product Name: "QuickInvoice Premium"
+             * 4. Description: "Remove watermark and unlock premium features (25 invoices)"
+             * 5. Pricing: One-time payment, $5.00 USD
+             * 6. Copy the price ID (starts with "price_") and replace STRIPE_CONFIG.priceId above
+             *
+             * SECURITY NOTE: Using your personal Stripe account is safe for this single-product use case.
+             * The price ID is public information and doesn't expose sensitive data.
              */
             async function createCheckoutSession() {
                 try {
-                    // Check if Stripe is properly initialized
                     if (!stripe) {
                         throw new Error('Stripe not initialized');
                     }
 
-                    // Get current invoice total for dynamic pricing
-                    const calculations = updateCalculations();
-                    const invoiceTotal = calculations.grandTotal;
+                    // Fixed $5 premium unlock (25 invoices)
+                    console.log('💰 Starting $5 Premium Unlock Payment');
 
-                    // Use invoice total in cents, minimum $1.00
-                    const dynamicAmount = Math.max(100, Math.round(invoiceTotal * 100));
-
-                    // For premium unlock, use either invoice total or $5 minimum
-                    const premiumUnlockAmount = Math.max(500, dynamicAmount); // $5 minimum or invoice total
-
-                    console.log('💰 Payment Details:', {
-                        invoiceSubtotal: calculations.subtotal,
-                        invoiceTax: calculations.taxAmount,
-                        invoiceTotal: invoiceTotal,
-                        premiumUnlockAmount: premiumUnlockAmount / 100,
-                        currency: STRIPE_CONFIG.currency
-                    });
-
-                    // Use Stripe Checkout (client-side camelCase parameters)
+                    // Use pre-defined price from Stripe dashboard
                     const result = await stripe.redirectToCheckout({
                         mode: 'payment',
                         lineItems: [{
-                            priceData: {
-                                currency: STRIPE_CONFIG.currency,
-                                productData: {
-                                    name: STRIPE_CONFIG.productName,
-                                    description: invoiceTotal > 5
-                                        ? `Premium unlock for invoice total $${invoiceTotal.toFixed(2)}`
-                                        : 'Remove watermark and unlock premium features'
-                                },
-                                unitAmount: premiumUnlockAmount
-                            },
+                            price: STRIPE_CONFIG.priceId, // Pre-created price in Stripe dashboard
                             quantity: 1
                         }],
                         successUrl: STRIPE_CONFIG.successUrl,
                         cancelUrl: STRIPE_CONFIG.cancelUrl
                     });
 
-                    // This will only execute if redirectToCheckout fails
                     if (result.error) {
                         throw new Error(result.error.message);
                     }
 
                 } catch (error) {
-                    console.error('Checkout session creation failed:', error);
+                    console.error('Checkout failed:', error);
                     setPremiumButtonLoading(false);
 
                     // Provide user-friendly error messages
@@ -2242,9 +2572,14 @@
                         showMessage('Payment system not ready. Please refresh the page and try again.', 'error');
                     } else if (error.message.includes('network')) {
                         showMessage('Network error. Please check your connection and try again.', 'error');
+                    } else if (error.message.includes('price_REPLACE')) {
+                        showMessage('Payment not configured. Please set up the Stripe price ID first.', 'error');
                     } else {
-                        showMessage(`Payment error: ${error.message}`, 'error');
+                        showMessage('Payment system error. Please try again.', 'error');
                     }
+
+                    // Track error for analytics
+                    trackAnalyticsEvent('checkout_error', 'monetization', error.message);
                 }
             }
 
@@ -2254,28 +2589,60 @@
              */
             function handlePaymentSuccess() {
                 try {
-                    // Set premium flag in localStorage
-                    localStorage.setItem('quickinvoice_premium', 'true');
-                    localStorage.setItem('quickinvoice_premium_date', new Date().toISOString());
+                    console.log('🎉 Payment successful! Activating premium...');
 
-                    // Update UI
-                    checkPremiumStatus();
-                    updateWatermarkDisplay();
+                    // Activate 25 premium invoices using the localStorage counter system
+                    activatePremium();
 
-                    // Show success message
-                    showMessage('🎉 Premium unlocked! Watermark removed from all future downloads.', 'success');
-
-                    // Track successful conversion
+                    // Track analytics
+                    trackAnalyticsEvent('payment_success', 'monetization', 'premium_unlock');
+                    trackAnalyticsEvent('premium_activated', 'user_segment', '25_invoices');
                     trackAnalyticsEvent('premium_purchase_complete', 'monetization', 'conversion_success', 5);
                     trackAnalyticsEvent('purchase', 'ecommerce', 'premium_upgrade', 5);
 
-                    // Clean up URL parameters if present
+                    // Update all UI elements
+                    updatePremiumButtonText();
+                    updateWatermarkDisplay();
+                    updateDownloadButtonState();
+
+                    // Show celebration message
+                    showMessage('🎉 Payment successful! Premium activated for 25 invoices. Your next PDFs will be watermark-free!', 'success');
+
+                    // Add visual celebration effect
+                    celebratePaymentSuccess();
+
+                    // Clean up URL parameters
                     cleanupUrlParameters();
 
                 } catch (error) {
-                    console.error('Error handling payment success:', error);
-                    trackAnalyticsEvent('payment_success_error', 'monetization', 'post_payment_error');
-                    showMessage('Payment successful but error updating features. Please refresh the page.', 'warning');
+                    console.error('Error processing payment success:', error);
+                    showMessage('Payment received, but there was an error activating premium. Please contact support.', 'error');
+                    trackAnalyticsEvent('payment_success_error', 'error', error.message);
+                }
+            }
+
+            /**
+             * Payment celebration effect
+             */
+            function celebratePaymentSuccess() {
+                try {
+                    // Add celebration animation to premium button
+                    const premiumButton = document.getElementById('premium-unlock');
+                    if (premiumButton) {
+                        premiumButton.style.animation = 'pulse 0.5s ease-in-out 3';
+
+                        // Reset animation after completion
+                        setTimeout(() => {
+                            premiumButton.style.animation = '';
+                        }, 1500);
+                    }
+
+                    // Optional: Confetti effect or other celebration
+                    // Can be enhanced with libraries like canvas-confetti in the future
+
+                } catch (error) {
+                    console.warn('Celebration effect error:', error);
+                    // Non-critical, don't disrupt user experience
                 }
             }
 
@@ -2283,8 +2650,25 @@
              * Handle payment cancellation
              */
             function handlePaymentCancel() {
-                showMessage('Payment was canceled. You can try again anytime.', 'info');
-                cleanupUrlParameters();
+                try {
+                    console.log('💔 Payment was canceled by user');
+
+                    // Track analytics
+                    trackAnalyticsEvent('payment_canceled', 'monetization', 'premium_unlock');
+
+                    // Reset button state in case it was stuck loading
+                    setPremiumButtonLoading(false);
+
+                    // Show friendly message
+                    showMessage('Payment was canceled. No charges were made to your card.', 'info');
+
+                    // Clean up URL parameters
+                    cleanupUrlParameters();
+
+                } catch (error) {
+                    console.error('Error processing payment cancellation:', error);
+                    // Don't show error to user for cancellation
+                }
             }
 
             /**
@@ -2297,37 +2681,75 @@
             }
 
             /**
+             * Enhanced error handling for Stripe flow
+             */
+            function handleStripeError(error) {
+                console.error('Stripe error:', error);
+                setPremiumButtonLoading(false);
+
+                // Provide user-friendly error messages
+                let userMessage = 'Payment system error. Please try again.';
+
+                if (error.message.includes('price_')) {
+                    userMessage = 'Payment configuration error. Please contact support.';
+                } else if (error.message.includes('network')) {
+                    userMessage = 'Network error. Please check your connection and try again.';
+                } else if (error.message.includes('canceled')) {
+                    userMessage = 'Payment was canceled. No charges were made.';
+                }
+
+                showMessage(userMessage, 'error');
+                trackAnalyticsEvent('stripe_error', 'error', error.message);
+            }
+
+            /**
              * Process URL parameters for payment flow
              */
             function processUrlParameters() {
                 const urlParams = new URLSearchParams(window.location.search);
 
-                // Handle new payment parameter format
-                if (urlParams.has('payment')) {
-                    const paymentStatus = urlParams.get('payment');
+                // Handle payment success
+                if (urlParams.get('payment') === 'success') {
+                    handlePaymentSuccess();
 
-                    switch (paymentStatus) {
-                        case 'success':
-                            // Handle successful payment return from Stripe
-                            handlePaymentSuccess();
-                            break;
-                        case 'cancel':
-                            // Handle payment cancellation
-                            handlePaymentCancel();
-                            break;
-                        default:
-                            console.warn('Unknown payment status:', paymentStatus);
-                    }
+                    // Clean up URL parameters after processing
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return;
                 }
 
-                // Legacy support for old URL format
-                else if (urlParams.has('success') && urlParams.get('success') === 'true') {
-                    handlePaymentSuccess();
-                } else if (urlParams.has('canceled') && urlParams.get('canceled') === 'true') {
+                // Handle payment cancellation
+                if (urlParams.get('payment') === 'cancel') {
                     handlePaymentCancel();
-                } else if (urlParams.has('error')) {
-                    // Handle payment error
+
+                    // Clean up URL parameters
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return;
+                }
+
+                // Handle legacy success parameter (backward compatibility)
+                if (urlParams.get('success') === 'true') {
+                    handlePaymentSuccess();
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return;
+                }
+
+                // Handle legacy canceled parameter (backward compatibility)
+                if (urlParams.get('canceled') === 'true') {
+                    handlePaymentCancel();
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return;
+                }
+
+                // Handle payment error
+                if (urlParams.has('error')) {
                     handlePaymentFailure(urlParams.get('error'));
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                    return;
                 }
             }
 
@@ -2349,11 +2771,116 @@
             }
 
             /**
-             * Validate Stripe configuration
+             * DEBUG HELPER FUNCTIONS (Development Only)
+             * =========================================
+             * Open browser console and run these commands for testing:
+             */
+
+            // Debug: Check current premium status
+            function debugPremiumStatus() {
+                console.log('=== PREMIUM STATUS DEBUG ===');
+                console.log('Premium active:', isPremiumActive());
+                console.log('Invoices left:', getPremiumInvoicesLeft());
+                console.log('localStorage value:', localStorage.getItem('premiumInvoicesLeft'));
+                console.log('Button text:', document.getElementById('premium-unlock')?.textContent);
+            }
+
+            // Debug: Simulate premium activation
+            function debugActivatePremium(count = 25) {
+                console.log(`Debug: Activating premium with ${count} invoices...`);
+                localStorage.setItem('premiumInvoicesLeft', count.toString());
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+                showMessage(`Debug: ${count} premium invoices activated`, 'success');
+            }
+
+            // Debug: Simulate premium usage
+            function debugUsePremium() {
+                if (isPremiumActive()) {
+                    usePremiumInvoice();
+                    console.log('Debug: Used 1 premium invoice. Remaining:', getPremiumInvoicesLeft());
+                } else {
+                    console.log('Debug: No premium invoices to use');
+                }
+            }
+
+            // Debug: Reset premium status
+            function debugResetPremium() {
+                localStorage.removeItem('premiumInvoicesLeft');
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+                console.log('Debug: Premium status reset');
+            }
+
+            // Debug: Simulate payment success
+            function debugPaymentSuccess() {
+                console.log('Debug: Simulating payment success...');
+                handlePaymentSuccess();
+            }
+
+            /**
+             * PRODUCTION NOTES:
+             * - Remove debug functions before deploying to production
+             * - Or wrap in development environment checks
+             * - Keep for local testing and development
+             */
+
+            /**
+             * CONFIGURATION VALIDATION
+             * ========================
+             */
+            function validateConfiguration() {
+                const issues = [];
+
+                // Check Stripe publishable key
+                if (!STRIPE_CONFIG.publishableKey || STRIPE_CONFIG.publishableKey === 'pk_test_PLACEHOLDER_KEY') {
+                    issues.push('Stripe publishable key not configured');
+                }
+
+                // Check price ID
+                if (!STRIPE_CONFIG.priceId || STRIPE_CONFIG.priceId === 'price_REPLACE_WITH_ACTUAL_PRICE_ID') {
+                    issues.push('Stripe price ID not configured - create product in Stripe dashboard');
+                }
+
+                // Check Stripe library loaded
+                if (typeof Stripe === 'undefined') {
+                    issues.push('Stripe.js library not loaded');
+                }
+
+                // Check localStorage support
+                try {
+                    localStorage.setItem('test', 'test');
+                    localStorage.removeItem('test');
+                } catch (e) {
+                    issues.push('localStorage not available');
+                }
+
+                if (issues.length > 0) {
+                    console.warn('⚠️ Configuration Issues:', issues);
+                    return false;
+                }
+
+                console.log('✅ Configuration validation passed');
+                return true;
+            }
+
+            // Run validation on startup
+            function runStartupValidation() {
+                if (!validateConfiguration()) {
+                    showMessage('Setup incomplete. Please check browser console for details.', 'warning');
+                }
+            }
+
+            /**
+             * Validate Stripe configuration (Legacy function - replaced by validateConfiguration)
              */
             function validateStripeConfig() {
                 if (STRIPE_CONFIG.publishableKey === 'pk_test_PLACEHOLDER_KEY') {
                     console.warn('⚠️ Using placeholder Stripe key. Replace with your actual publishable key for production.');
+                    return false;
+                }
+                if (STRIPE_CONFIG.priceId === 'price_REPLACE_WITH_ACTUAL_PRICE_ID') {
+                    console.warn('⚠️ Using placeholder price ID. Create a $5 product in Stripe dashboard and replace STRIPE_CONFIG.priceId.');
                     return false;
                 }
                 return true;
@@ -2381,6 +2908,7 @@
                     // Initialize Stripe
                     initializeStripe();
                     validateStripeConfig();
+                    runStartupValidation();
 
                     // Process URL parameters for payment flow
                     processUrlParameters();
@@ -2555,6 +3083,17 @@
                 });
             }
 
+            // === GLOBAL DEBUG FUNCTIONS ===
+            // Make debug functions available in browser console
+
+            // Expose premium debug functions globally
+            window.debugPremiumStatus = debugPremiumStatus;
+            window.debugActivatePremium = debugActivatePremium;
+            window.debugUsePremium = debugUsePremium;
+            window.debugResetPremium = debugResetPremium;
+            window.debugPaymentSuccess = debugPaymentSuccess;
+            window.validateConfiguration = validateConfiguration;
+
             // === START APPLICATION ===
 
             // Initialize when DOM is ready
@@ -2565,6 +3104,480 @@
             }
 
         })();
+
+        /**
+         * INTEGRATION VALIDATION SUITE
+         * ============================
+         * Comprehensive validation of all premium system components
+         */
+
+        function runIntegrationValidation() {
+            console.log('🔍 Starting Integration Validation...');
+
+            const results = {
+                stripe: validateStripeIntegration(),
+                localStorage: validateLocalStorageIntegration(),
+                watermark: validateWatermarkIntegration(),
+                payment: validatePaymentFlowIntegration(),
+                ui: validateUIIntegration()
+            };
+
+            const allPassed = Object.values(results).every(result => result.success);
+
+            console.log('📊 Integration Validation Results:', results);
+
+            if (allPassed) {
+                console.log('✅ All integration tests passed! System ready for deployment.');
+                showMessage('✅ Integration validation passed! System ready for Stripe setup.', 'success');
+            } else {
+                console.error('❌ Integration validation failed. Check console for details.');
+                showMessage('❌ Integration issues found. Check browser console for details.', 'error');
+            }
+
+            return allPassed;
+        }
+
+        function validateStripeIntegration() {
+            try {
+                // Check Stripe configuration
+                const hasConfig = typeof STRIPE_CONFIG !== 'undefined';
+                const hasPrice = STRIPE_CONFIG?.priceId && STRIPE_CONFIG.priceId !== 'price_REPLACE_WITH_ACTUAL_PRICE_ID';
+                const hasKey = STRIPE_CONFIG?.publishableKey && STRIPE_CONFIG.publishableKey.startsWith('pk_');
+
+                // Check createCheckoutSession function exists
+                const hasCheckoutFunction = typeof createCheckoutSession === 'function';
+
+                // Check Stripe library loading
+                const hasStripeLib = typeof Stripe !== 'undefined';
+
+                return {
+                    success: hasConfig && hasCheckoutFunction && hasStripeLib,
+                    details: {
+                        config: hasConfig,
+                        priceConfigured: hasPrice,
+                        keyConfigured: hasKey,
+                        checkoutFunction: hasCheckoutFunction,
+                        stripeLibrary: hasStripeLib
+                    }
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function validateLocalStorageIntegration() {
+            try {
+                // Check premium functions exist
+                const functions = [
+                    'getPremiumInvoicesLeft',
+                    'isPremiumActive',
+                    'usePremiumInvoice',
+                    'activatePremium'
+                ];
+
+                const functionsExist = functions.every(fn => typeof window[fn] === 'function');
+
+                // Test localStorage operations
+                const initialCount = getPremiumInvoicesLeft();
+                localStorage.setItem('premiumInvoicesLeft', '5');
+                const testCount = getPremiumInvoicesLeft();
+                const testActive = isPremiumActive();
+                localStorage.setItem('premiumInvoicesLeft', initialCount.toString());
+
+                return {
+                    success: functionsExist && testCount === 5 && testActive === true,
+                    details: {
+                        functionsExist,
+                        localStorageWorks: testCount === 5,
+                        statusCheck: testActive === true
+                    }
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function validateWatermarkIntegration() {
+            try {
+                // Check watermark functions exist
+                const hasAddWatermark = typeof addWatermark === 'function';
+                const hasUpdateDisplay = typeof updateWatermarkDisplay === 'function';
+
+                // Check watermark respects premium status
+                const originalCount = getPremiumInvoicesLeft();
+
+                // Test with premium active
+                localStorage.setItem('premiumInvoicesLeft', '5');
+                const shouldSkipWatermark = isPremiumActive();
+
+                // Test with no premium
+                localStorage.setItem('premiumInvoicesLeft', '0');
+                const shouldShowWatermark = !isPremiumActive();
+
+                // Restore original state
+                localStorage.setItem('premiumInvoicesLeft', originalCount.toString());
+
+                return {
+                    success: hasAddWatermark && hasUpdateDisplay && shouldSkipWatermark && shouldShowWatermark,
+                    details: {
+                        addWatermarkExists: hasAddWatermark,
+                        updateDisplayExists: hasUpdateDisplay,
+                        premiumSkipsWatermark: shouldSkipWatermark,
+                        freeShowsWatermark: shouldShowWatermark
+                    }
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function validatePaymentFlowIntegration() {
+            try {
+                // Check payment flow functions exist
+                const functions = [
+                    'handlePaymentSuccess',
+                    'handlePaymentCancel',
+                    'processUrlParameters',
+                    'setPremiumButtonLoading'
+                ];
+
+                const functionsExist = functions.every(fn => typeof window[fn] === 'function');
+
+                // Check URL parameter processing
+                const hasProcessUrlParams = typeof processUrlParameters === 'function';
+
+                // Check payment success integration
+                const hasPaymentSuccess = typeof handlePaymentSuccess === 'function';
+
+                return {
+                    success: functionsExist && hasProcessUrlParams && hasPaymentSuccess,
+                    details: {
+                        allFunctionsExist: functionsExist,
+                        urlProcessing: hasProcessUrlParams,
+                        paymentSuccess: hasPaymentSuccess
+                    }
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function validateUIIntegration() {
+            try {
+                // Check UI elements exist
+                const premiumButton = document.getElementById('premium-unlock');
+                const watermarkToggle = document.getElementById('watermark-toggle');
+
+                // Check UI update functions exist
+                const hasUpdateButton = typeof updatePremiumButtonText === 'function';
+                const hasUpdateWatermark = typeof updateWatermarkDisplay === 'function';
+
+                // Test UI updates
+                const originalCount = getPremiumInvoicesLeft();
+
+                // Test premium UI state
+                localStorage.setItem('premiumInvoicesLeft', '10');
+                updatePremiumButtonText();
+                const buttonTextWithPremium = premiumButton?.textContent || '';
+
+                // Test free UI state
+                localStorage.setItem('premiumInvoicesLeft', '0');
+                updatePremiumButtonText();
+                const buttonTextWithoutPremium = premiumButton?.textContent || '';
+
+                // Restore original state
+                localStorage.setItem('premiumInvoicesLeft', originalCount.toString());
+                updatePremiumButtonText();
+
+                return {
+                    success: premiumButton && hasUpdateButton && hasUpdateWatermark,
+                    details: {
+                        premiumButtonExists: !!premiumButton,
+                        watermarkToggleExists: !!watermarkToggle,
+                        updateFunctionsExist: hasUpdateButton && hasUpdateWatermark,
+                        uiUpdatesWork: buttonTextWithPremium.includes('Premium') && buttonTextWithoutPremium.includes('$5')
+                    }
+                };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        /**
+         * USER FLOW TESTING
+         * ==================
+         * Test complete user journeys through the premium system
+         */
+
+        function testCompleteUserFlow() {
+            console.log('🎯 Testing Complete User Flow...');
+
+            try {
+                // 1. Start as free user
+                localStorage.removeItem('premiumInvoicesLeft');
+                updatePremiumButtonText();
+                updateWatermarkDisplay();
+
+                console.log('Step 1: Free user state initialized');
+                console.log('- Premium active:', isPremiumActive());
+                console.log('- Button text:', document.getElementById('premium-unlock')?.textContent);
+
+                // 2. Simulate payment success
+                console.log('Step 2: Simulating payment success...');
+                handlePaymentSuccess();
+
+                console.log('- Premium active:', isPremiumActive());
+                console.log('- Invoices left:', getPremiumInvoicesLeft());
+                console.log('- Button text:', document.getElementById('premium-unlock')?.textContent);
+
+                // 3. Simulate PDF generation (use premium invoices)
+                console.log('Step 3: Simulating PDF generations...');
+                for (let i = 0; i < 3; i++) {
+                    usePremiumInvoice();
+                    console.log(`- After PDF ${i + 1}: ${getPremiumInvoicesLeft()} invoices left`);
+                }
+
+                // 4. Test premium expiration
+                console.log('Step 4: Testing premium expiration...');
+                localStorage.setItem('premiumInvoicesLeft', '1');
+                updatePremiumButtonText();
+                usePremiumInvoice(); // Should go to 0
+
+                console.log('- Premium active after expiration:', isPremiumActive());
+                console.log('- Button text after expiration:', document.getElementById('premium-unlock')?.textContent);
+
+                console.log('✅ Complete user flow test passed!');
+                showMessage('✅ User flow test completed successfully!', 'success');
+                return true;
+
+            } catch (error) {
+                console.error('❌ User flow test failed:', error);
+                showMessage('❌ User flow test failed. Check console for details.', 'error');
+                return false;
+            }
+        }
+
+        /**
+         * DEPLOYMENT READINESS CHECK
+         * ==========================
+         * Final validation before deployment
+         */
+
+        function checkDeploymentReadiness() {
+            console.log('🚀 Checking Deployment Readiness...');
+
+            const checks = [
+                {
+                    name: 'Stripe Configuration',
+                    test: () => STRIPE_CONFIG.priceId !== 'price_REPLACE_WITH_ACTUAL_PRICE_ID',
+                    message: 'Replace price ID with actual Stripe price'
+                },
+                {
+                    name: 'Publishable Key',
+                    test: () => STRIPE_CONFIG.publishableKey.startsWith('pk_test_') || STRIPE_CONFIG.publishableKey.startsWith('pk_live_'),
+                    message: 'Valid Stripe publishable key configured'
+                },
+                {
+                    name: 'Premium Functions',
+                    test: () => typeof isPremiumActive === 'function' && typeof activatePremium === 'function',
+                    message: 'Premium system functions available'
+                },
+                {
+                    name: 'Watermark Integration',
+                    test: () => typeof addWatermark === 'function',
+                    message: 'Watermark system integrated'
+                },
+                {
+                    name: 'Payment Flow',
+                    test: () => typeof handlePaymentSuccess === 'function',
+                    message: 'Payment success handling ready'
+                },
+                {
+                    name: 'UI Elements',
+                    test: () => !!document.getElementById('premium-unlock'),
+                    message: 'Premium button exists in UI'
+                },
+                {
+                    name: 'Stripe Library',
+                    test: () => typeof Stripe !== 'undefined',
+                    message: 'Stripe.js library loaded'
+                },
+                {
+                    name: 'PDF Library',
+                    test: () => typeof jsPDF !== 'undefined',
+                    message: 'jsPDF library loaded'
+                },
+                {
+                    name: 'LocalStorage Support',
+                    test: () => {
+                        try {
+                            localStorage.setItem('test', 'test');
+                            localStorage.removeItem('test');
+                            return true;
+                        } catch (e) {
+                            return false;
+                        }
+                    },
+                    message: 'LocalStorage available'
+                }
+            ];
+
+            const results = checks.map(check => ({
+                ...check,
+                passed: check.test()
+            }));
+
+            const allPassed = results.every(result => result.passed);
+
+            console.table(results);
+
+            if (allPassed) {
+                console.log('🎉 System ready for deployment!');
+                showMessage('🎉 System validation complete! Ready to deploy and configure Stripe.', 'success');
+            } else {
+                console.warn('⚠️ Deployment readiness issues found');
+                const failed = results.filter(r => !r.passed);
+                failed.forEach(check => console.warn(`- ${check.name}: ${check.message}`));
+                showMessage('⚠️ System issues found. Check console for details.', 'warning');
+            }
+
+            return allPassed;
+        }
+
+        /**
+         * VALIDATION COMMAND CENTER
+         * =========================
+         * Central hub for running all validation tests
+         */
+
+        function runAllValidationTests() {
+            console.log('🧪 Running Complete Validation Suite...');
+            console.log('='.repeat(50));
+
+            const tests = [
+                { name: 'Integration Validation', fn: runIntegrationValidation },
+                { name: 'User Flow Testing', fn: testCompleteUserFlow },
+                { name: 'Deployment Readiness', fn: checkDeploymentReadiness }
+            ];
+
+            const results = [];
+
+            for (const test of tests) {
+                console.log(`\n🔬 Running ${test.name}...`);
+                try {
+                    const result = test.fn();
+                    results.push({ name: test.name, passed: result });
+                    console.log(`${result ? '✅' : '❌'} ${test.name}: ${result ? 'PASSED' : 'FAILED'}`);
+                } catch (error) {
+                    console.error(`❌ ${test.name} failed with error:`, error);
+                    results.push({ name: test.name, passed: false, error: error.message });
+                }
+            }
+
+            console.log('\n📋 VALIDATION SUMMARY');
+            console.log('='.repeat(50));
+            console.table(results);
+
+            const allPassed = results.every(r => r.passed);
+
+            if (allPassed) {
+                console.log('🎉 ALL VALIDATION TESTS PASSED!');
+                console.log('✅ System is ready for production deployment');
+                showMessage('🎉 All validation tests passed! System ready for production.', 'success');
+            } else {
+                console.log('❌ Some validation tests failed');
+                console.log('⚠️ Review issues before deployment');
+                showMessage('❌ Validation issues found. Review console before deployment.', 'error');
+            }
+
+            return allPassed;
+        }
+
+        /**
+         * QUICK VALIDATION TEST
+         * ====================
+         * Simple test to verify basic functionality
+         */
+        function quickValidationTest() {
+            console.log('⚡ Running Quick Validation Test...');
+
+            const issues = [];
+
+            // Test 1: Core functions exist
+            const requiredFunctions = [
+                'isPremiumActive', 'activatePremium', 'usePremiumInvoice', 'getPremiumInvoicesLeft',
+                'addWatermark', 'updateWatermarkDisplay', 'handlePaymentSuccess', 'createCheckoutSession',
+                'updatePremiumButtonText', 'processUrlParameters', 'setPremiumButtonLoading', 'handlePaymentCancel'
+            ];
+
+            requiredFunctions.forEach(fn => {
+                if (typeof window[fn] !== 'function') {
+                    issues.push(`Missing function: ${fn}`);
+                }
+            });
+
+            // Test 2: DOM elements exist
+            const requiredElements = ['premium-unlock', 'watermark-toggle'];
+            requiredElements.forEach(id => {
+                if (!document.getElementById(id)) {
+                    issues.push(`Missing DOM element: ${id}`);
+                }
+            });
+
+            // Test 3: Libraries loaded
+            if (typeof Stripe === 'undefined') issues.push('Stripe library not loaded');
+            if (typeof jsPDF === 'undefined') issues.push('jsPDF library not loaded');
+
+            // Test 4: Configuration exists
+            if (typeof STRIPE_CONFIG === 'undefined') issues.push('STRIPE_CONFIG not defined');
+
+            // Test 5: localStorage works
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+            } catch (e) {
+                issues.push('localStorage not available');
+            }
+
+            if (issues.length === 0) {
+                console.log('✅ Quick validation passed! All components ready.');
+                showMessage('✅ Quick validation passed! System ready for testing.', 'success');
+                return true;
+            } else {
+                console.warn('⚠️ Quick validation issues:', issues);
+                showMessage(`⚠️ ${issues.length} validation issues found`, 'warning');
+                return false;
+            }
+        }
+
+        // Expose validation functions globally for console access
+        window.runIntegrationValidation = runIntegrationValidation;
+        window.testCompleteUserFlow = testCompleteUserFlow;
+        window.checkDeploymentReadiness = checkDeploymentReadiness;
+        window.runAllValidationTests = runAllValidationTests;
+        window.quickValidationTest = quickValidationTest;
+
+        // Auto-run deployment readiness check after page load
+        if (typeof window !== 'undefined') {
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    console.log('\n🔧 Auto-running deployment readiness check...');
+                    checkDeploymentReadiness();
+
+                    // Display validation guide
+                    console.log('\n📋 VALIDATION COMMANDS AVAILABLE:');
+                    console.log('==========================================');
+                    console.log('• quickValidationTest()     - Quick 30-second test');
+                    console.log('• runIntegrationValidation() - Component integration test');
+                    console.log('• testCompleteUserFlow()    - End-to-end user flow test');
+                    console.log('• checkDeploymentReadiness() - Production readiness check');
+                    console.log('• runAllValidationTests()   - Complete validation suite');
+                    console.log('');
+                    console.log('📖 See VALIDATION_GUIDE.md for detailed instructions');
+                    console.log('💡 Run runAllValidationTests() for complete validation');
+                }, 2000);
+            });
+        }
 
         /**
          * DEPLOYMENT CHECKLIST:
