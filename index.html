@@ -3369,12 +3369,12 @@
             const checks = [
                 {
                     name: 'Stripe Configuration',
-                    test: () => STRIPE_CONFIG.priceId !== 'price_REPLACE_WITH_ACTUAL_PRICE_ID',
+                    test: () => typeof STRIPE_CONFIG !== 'undefined' && STRIPE_CONFIG.priceId !== 'price_REPLACE_WITH_ACTUAL_PRICE_ID',
                     message: 'Replace price ID with actual Stripe price'
                 },
                 {
                     name: 'Publishable Key',
-                    test: () => STRIPE_CONFIG.publishableKey.startsWith('pk_test_') || STRIPE_CONFIG.publishableKey.startsWith('pk_live_'),
+                    test: () => typeof STRIPE_CONFIG !== 'undefined' && (STRIPE_CONFIG.publishableKey.startsWith('pk_test_') || STRIPE_CONFIG.publishableKey.startsWith('pk_live_')),
                     message: 'Valid Stripe publishable key configured'
                 },
                 {
