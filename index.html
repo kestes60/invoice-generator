@@ -3433,12 +3433,16 @@
 
             if (allPassed) {
                 console.log('🎉 System ready for deployment!');
-                showMessage('🎉 System validation complete! Ready to deploy and configure Stripe.', 'success');
+                if (typeof showMessage === 'function') {
+                    showMessage('🎉 System validation complete! Ready to deploy and configure Stripe.', 'success');
+                }
             } else {
                 console.warn('⚠️ Deployment readiness issues found');
                 const failed = results.filter(r => !r.passed);
                 failed.forEach(check => console.warn(`- ${check.name}: ${check.message}`));
-                showMessage('⚠️ System issues found. Check console for details.', 'warning');
+                if (typeof showMessage === 'function') {
+                    showMessage('⚠️ System issues found. Check console for details.', 'warning');
+                }
             }
 
             return allPassed;
