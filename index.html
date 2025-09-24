@@ -147,6 +147,25 @@
                 min-height: 44px;
                 padding: 12px;
             }
+
+            /* Make quantity and rate inputs more usable on mobile */
+            #line-items-table th:nth-child(2), /* Qty column */
+            #line-items-table th:nth-child(3), /* Rate column */
+            #line-items-table td:nth-child(2), /* Qty cells */
+            #line-items-table td:nth-child(3) { /* Rate cells */
+                min-width: 120px;
+            }
+
+            /* Make invoice totals responsive and prevent overflow */
+            #invoice-preview .flex.justify-end > div {
+                width: 100%;
+                max-width: 280px;
+            }
+
+            /* Add gap to prevent cramped totals layout */
+            #invoice-preview .flex.justify-between {
+                gap: 1rem;
+            }
         }
 
         /* Loading animation */
